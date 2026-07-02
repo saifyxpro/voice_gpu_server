@@ -15,13 +15,35 @@ VOICES_DIR="${PROJECT_ROOT}/voices"
 OUT_DIR="${PROJECT_ROOT}/.test-output"
 ENV_FILE="${PROJECT_ROOT}/.env"
 
-# Read a single KEY=value from .env (no bash source — safe for special chars)
+# Read a single KEY=value from .env (supports export PREFIX, quotes, inline comments)
 env_get() {
   local key="$1"
   [[ -f "${ENV_FILE}" ]] || return 0
-  grep -E "^[[:space:]]*${key}=" "${ENV_FILE}" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '\r' \
-    | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' \
-          -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"
+  python3 - "${key}" "${ENV_FILE}" <<'PY'
+import sys
+from pathlib import Path
+
+key, path = sys.argv[1], Path(sys.argv[2])
+value = ""
+for raw in path.read_text(encoding="utf-8").splitlines():
+    line = raw.strip()
+    if not line or line.startswith("#"):
+        continue
+    if line.startswith("export "):
+        line = line[7:].strip()
+    if "=" not in line:
+        continue
+    name, _, val = line.partition("=")
+    if name.strip() != key:
+        continue
+    val = val.strip()
+    if " #" in val:
+        val = val.split(" #", 1)[0].rstrip()
+    if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
+        val = val[1:-1]
+    value = val
+print(value, end="")
+PY
 }
 
 load_env() {
@@ -29,17 +51,25 @@ load_env() {
     fail "Missing ${ENV_FILE} — copy .env.example to .env and set VOICE_GPU_API_KEY"
   fi
 
-  # .env is the default; exported shell vars can override if already set
-  if [[ -z "${VOICE_GPU_API_KEY:-}" ]]; then
-    VOICE_GPU_API_KEY="$(env_get VOICE_GPU_API_KEY)"
-  fi
-  if [[ -z "${VOICE_GPU_BASE_URL:-}" ]]; then
-    VOICE_GPU_BASE_URL="$(env_get VOICE_GPU_BASE_URL)"
-  fi
-  if [[ -z "${VOICE_GPU_PORT:-}" ]]; then
-    VOICE_GPU_PORT="$(env_get VOICE_GPU_PORT)"
-  fi
+  # .env is authoritative (ignore stale shell exports like VOICE_GPU_API_KEY=your-key)
+  local from_env
+  from_env="$(env_get VOICE_GPU_API_KEY)"
+  [[ -n "${from_env}" ]] && VOICE_GPU_API_KEY="${from_env}"
+
+  from_env="$(env_get VOICE_GPU_BASE_URL)"
+  [[ -n "${from_env}" ]] && VOICE_GPU_BASE_URL="${from_env}"
+
+  from_env="$(env_get VOICE_GPU_PORT)"
+  [[ -n "${from_env}" ]] && VOICE_GPU_PORT="${from_env}"
+
   VOICE_GPU_PORT="${VOICE_GPU_PORT:-8765}"
+
+  if [[ -z "${VOICE_GPU_API_KEY:-}" ]]; then
+    fail "VOICE_GPU_API_KEY is empty in ${ENV_FILE}"
+  fi
+  if [[ "${VOICE_GPU_API_KEY}" == "change-me-to-a-long-random-string" || "${VOICE_GPU_API_KEY}" == "your-key" ]]; then
+    fail "VOICE_GPU_API_KEY in ${ENV_FILE} is still a placeholder — set your real key"
+  fi
 }
 
 pass() { echo "✅ $*"; }
@@ -74,6 +104,7 @@ mkdir -p "$OUT_DIR"
 echo "=== voice-gpu-server API tests ==="
 echo "Env file: ${ENV_FILE}"
 echo "Base URL: ${BASE_URL}"
+echo "API key:  loaded (${#API_KEY} chars)"
 echo "Output:   ${OUT_DIR}"
 echo ""
 
@@ -92,7 +123,12 @@ VOICES_RAW=$(curl "${CURL_OPTS[@]}" "${NGROK_HDR[@]}" "${AUTH[@]}" \
 VOICES_CODE="${VOICES_RAW##*$'\n'}"
 VOICES_BODY="${VOICES_RAW%$'\n'*}"
 echo "$VOICES_BODY" | python3 -m json.tool
-[[ "$VOICES_CODE" == "200" ]] || fail "list voices HTTP ${VOICES_CODE}"
+[[ "$VOICES_CODE" == "200" ]] || {
+  if [[ "$VOICES_CODE" == "401" ]]; then
+    fail "list voices HTTP 401 — VOICE_GPU_API_KEY in .env does not match the running server (loaded ${#API_KEY} chars). Restart server after editing .env."
+  fi
+  fail "list voices HTTP ${VOICES_CODE}"
+}
 echo "$VOICES_BODY" | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
