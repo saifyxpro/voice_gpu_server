@@ -89,6 +89,6 @@ Start ngrok (terminal 2):
   ./scripts/start-ngrok.sh
 
 Test:
-  export VOICE_GPU_API_KEY=\$(grep '^VOICE_GPU_API_KEY=' .env | cut -d= -f2-)
-  ./scripts/test-api.sh http://127.0.0.1:8765
+  ./scripts/test-api.sh
+  # uses VOICE_GPU_API_KEY + VOICE_GPU_BASE_URL from .env
 EOF

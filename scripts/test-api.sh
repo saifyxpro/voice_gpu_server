@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Smoke-test TTS/STT on a running voice-gpu-server.
 #
+# Reads config from project .env (VOICE_GPU_API_KEY, VOICE_GPU_BASE_URL, VOICE_GPU_PORT).
+#
 # Usage:
 #   ./scripts/test-api.sh
 #   ./scripts/test-api.sh http://127.0.0.1:8765
 #   ./scripts/test-api.sh https://your-name.ngrok-free.dev
-#
-# Loads VOICE_GPU_API_KEY from .env if not already exported.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -15,17 +15,50 @@ VOICES_DIR="${PROJECT_ROOT}/voices"
 OUT_DIR="${PROJECT_ROOT}/.test-output"
 ENV_FILE="${PROJECT_ROOT}/.env"
 
-BASE_URL="${1:-http://127.0.0.1:8765}"
-BASE_URL="${BASE_URL%/}"
+# Read a single KEY=value from .env (no bash source — safe for special chars)
+env_get() {
+  local key="$1"
+  [[ -f "${ENV_FILE}" ]] || return 0
+  grep -E "^[[:space:]]*${key}=" "${ENV_FILE}" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '\r' \
+    | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' \
+          -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"
+}
 
-# Load API key from .env when not exported
-if [[ -z "${VOICE_GPU_API_KEY:-}" && -f "${ENV_FILE}" ]]; then
-  # shellcheck disable=SC1090
-  set -a
-  source "${ENV_FILE}"
-  set +a
+load_env() {
+  if [[ ! -f "${ENV_FILE}" ]]; then
+    fail "Missing ${ENV_FILE} — copy .env.example to .env and set VOICE_GPU_API_KEY"
+  fi
+
+  # .env is the default; exported shell vars can override if already set
+  if [[ -z "${VOICE_GPU_API_KEY:-}" ]]; then
+    VOICE_GPU_API_KEY="$(env_get VOICE_GPU_API_KEY)"
+  fi
+  if [[ -z "${VOICE_GPU_BASE_URL:-}" ]]; then
+    VOICE_GPU_BASE_URL="$(env_get VOICE_GPU_BASE_URL)"
+  fi
+  if [[ -z "${VOICE_GPU_PORT:-}" ]]; then
+    VOICE_GPU_PORT="$(env_get VOICE_GPU_PORT)"
+  fi
+  VOICE_GPU_PORT="${VOICE_GPU_PORT:-8765}"
+}
+
+pass() { echo "✅ $*"; }
+fail() { echo "❌ $*"; exit 1; }
+warn() { echo "⚠️  $*"; }
+
+load_env
+
+API_KEY="${VOICE_GPU_API_KEY:?Set VOICE_GPU_API_KEY in ${ENV_FILE}}"
+
+# Base URL: CLI arg > VOICE_GPU_BASE_URL from .env > localhost
+if [[ -n "${1:-}" ]]; then
+  BASE_URL="$1"
+elif [[ -n "${VOICE_GPU_BASE_URL:-}" ]]; then
+  BASE_URL="${VOICE_GPU_BASE_URL}"
+else
+  BASE_URL="http://127.0.0.1:${VOICE_GPU_PORT}"
 fi
-API_KEY="${VOICE_GPU_API_KEY:?Set VOICE_GPU_API_KEY in env or ${ENV_FILE}}"
+BASE_URL="${BASE_URL%/}"
 
 AUTH=(-H "Authorization: Bearer ${API_KEY}")
 NGROK_HDR=()
@@ -38,12 +71,9 @@ CURL_OPTS=(-sS --connect-timeout 15 --max-time 600)
 
 mkdir -p "$OUT_DIR"
 
-pass() { echo "✅ $*"; }
-fail() { echo "❌ $*"; exit 1; }
-warn() { echo "⚠️  $*"; }
-
 echo "=== voice-gpu-server API tests ==="
-echo "Base URL: $BASE_URL"
+echo "Env file: ${ENV_FILE}"
+echo "Base URL: ${BASE_URL}"
 echo "Output:   ${OUT_DIR}"
 echo ""
 
@@ -100,7 +130,7 @@ test -s "${OUT_DIR}/tts-kelvin.wav" && pass "TTS kelvin WAV saved" || fail "TTS 
 # --- 4. TTS streaming ---
 echo ""
 echo "--- 4. TTS (lim, streaming PCM) ---"
-TTS_STREAM_HEADERS=$(curl "${CURL_OPTS[@]}" "${NGROK_HDR[@]}" "${AUTH[@]}" \
+TTS_STREAM_CODE=$(curl "${CURL_OPTS[@]}" "${NGROK_HDR[@]}" "${AUTH[@]}" \
   -H "Content-Type: application/json" \
   -X POST "${BASE_URL}/v1/tts" \
   -d '{"text":"Hello from Lim, lah.","voice_id":"lim","stream":true,"response_format":"pcm"}' \
@@ -108,7 +138,7 @@ TTS_STREAM_HEADERS=$(curl "${CURL_OPTS[@]}" "${NGROK_HDR[@]}" "${AUTH[@]}" \
   -o "${OUT_DIR}/tts-lim.pcm" \
   -w "%{http_code}")
 head -20 "${OUT_DIR}/tts-lim-headers.txt"
-[[ "$TTS_STREAM_HEADERS" == "200" ]] || fail "streaming TTS HTTP ${TTS_STREAM_HEADERS}"
+[[ "$TTS_STREAM_CODE" == "200" ]] || fail "streaming TTS HTTP ${TTS_STREAM_CODE}"
 if [[ "$(head -c 1 "${OUT_DIR}/tts-lim.pcm")" == "{" ]]; then
   cat "${OUT_DIR}/tts-lim.pcm"
   fail "streaming TTS returned JSON error instead of PCM"
