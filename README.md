@@ -71,7 +71,7 @@ Chatterbox Turbo needs a ~10s reference clip:
 cp /path/to/speaker.wav voices/kelvin.wav
 ```
 
-See [voices/README.md](voices/README.md) for paralinguistic tags (`[chuckle]`, `[laugh]`, etc.).
+See [voices/README.md](voices/README.md) for the full Chatterbox Turbo tag list (`[clear throat]`, `[sigh]`, `[chuckle]`, `[laugh]`, and six more).
 
 ## API endpoints
 
@@ -174,7 +174,7 @@ ngrok-skip-browser-warning: true
 ./scripts/test-api.sh
 ```
 
-The script exercises **both voices** (`kelvin`, `lim`) with Singlish sample text and Chatterbox expressive tags (`[chuckle]`, `[laugh]`). Outputs land in `.test-output/`:
+The script exercises **both voices** (`kelvin`, `lim`) with Singlish sample text and Chatterbox expressive tags (`[chuckle]`, `[laugh]`, `[clear throat]`, `[sigh]`, etc.). See [voices/README.md](voices/README.md#paralinguistic-tags) for all nine supported tags. Outputs land in `.test-output/`:
 
 | File | Test |
 |------|------|

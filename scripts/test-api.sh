@@ -165,7 +165,7 @@ PY
 # --- 3. TTS kelvin (non-streaming WAV + expressive tags) ---
 echo ""
 echo "--- 3. TTS (kelvin, non-streaming WAV + expressive tags) ---"
-KELVIN_TEXT="Hi, good afternoon. This is Kevin from One CoSec, ah [chuckle]. Got a few reminders about your AGM and filing dates lor. [laugh] Don't worry lah, quite straightforward one. You free now to talk, or you prefer I send everything by email instead hor?"
+KELVIN_TEXT="Hi, good afternoon. [clear throat] This is Kevin from One CoSec, ah [chuckle]. Got a few reminders about your AGM and filing dates lor. [sigh] Don't worry lah, quite straightforward one. You free now to talk, or you prefer I send everything by email instead hor?"
 echo "text: ${KELVIN_TEXT}"
 tts_payload kelvin false wav "$KELVIN_TEXT" "${OUT_DIR}/payload-kelvin.json"
 TTS_RAW=$(curl "${CURL_OPTS[@]}" "${NGROK_HDR[@]}" "${AUTH[@]}" \
@@ -193,7 +193,7 @@ test -s "${OUT_DIR}/tts-kelvin.wav" && pass "TTS kelvin WAV saved" || fail "TTS 
 # --- 4. TTS lim (non-streaming WAV + expressive tags) ---
 echo ""
 echo "--- 4. TTS (lim, non-streaming WAV + expressive tags) ---"
-LIM_TEXT="Hello, Lim here from One CoSec again, ah [chuckle]. Just a gentle reminder leh — your annual return deadline coming up already, so I thought I'll give you a quick call. Nothing to panic about lah [laugh]. If you already submitted, can let me know hor? Otherwise I can walk you through the steps now — you got five minutes or not?"
+LIM_TEXT="Hello, Lim here from One CoSec again, ah. [clear throat] Just a gentle reminder leh — your annual return deadline coming up already, so I thought I'll give you a quick call. Nothing to panic about lah [chuckle]. If you already submitted, can let me know hor? Otherwise I can walk you through the steps now — you got five minutes or not?"
 echo "text: ${LIM_TEXT}"
 tts_payload lim false wav "$LIM_TEXT" "${OUT_DIR}/payload-lim.json"
 TTS_LIM_RAW=$(curl "${CURL_OPTS[@]}" "${NGROK_HDR[@]}" "${AUTH[@]}" \
