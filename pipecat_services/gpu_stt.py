@@ -74,9 +74,11 @@ class VoiceGpuSTTService(SegmentedSTTService):
         return self._session
 
     def _headers(self) -> dict[str, str]:
-        headers = {}
+        headers: dict[str, str] = {}
         if self._api_key:
             headers["Authorization"] = f"Bearer {self._api_key}"
+        if "ngrok" in self._base_url:
+            headers["ngrok-skip-browser-warning"] = "true"
         return headers
 
     @traced_stt

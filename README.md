@@ -134,15 +134,48 @@ curl -X POST http://localhost:8765/v1/stt \
 
 ## Expose via ngrok
 
-For Pipecat clients that cannot reach the H100 directly:
+Docs: [ngrok Agent CLI](https://ngrok.com/docs/agent/cli/) · [HTTP endpoints](https://ngrok.com/docs/gateway/http/)
+
+Free accounts get a **static dev domain** (e.g. `your-name.ngrok-free.dev`) that does not change on restart. Find yours in **Dashboard → Gateway → Domains**.
+
+### One-time setup (on H100)
 
 ```bash
-# Set NGROK_AUTHTOKEN in .env
+# Authenticate agent (stored in ~/.config/ngrok/ngrok.yml)
+ngrok config add-authtoken YOUR_TOKEN
+
+# In .env — your assigned dev domain + public base URL for clients
+NGROK_URL=https://your-name.ngrok-free.dev
+VOICE_GPU_BASE_URL=https://your-name.ngrok-free.dev
+```
+
+### Start tunnel
+
+```bash
 chmod +x scripts/start-ngrok.sh
 ./scripts/start-ngrok.sh
 ```
 
-Copy the `https://….ngrok-free.app` URL into `VOICE_GPU_BASE_URL` in your Pipecat bot `.env`.
+The script uses `ngrok http 8765 --url=$NGROK_URL` when `NGROK_URL` is set (recommended). Inspector UI: `http://127.0.0.1:4040`.
+
+**Alternative** — named endpoint via config file:
+
+```bash
+cp ngrok.yml.example ~/.config/ngrok/ngrok.yml   # edit YOUR_DEV_DOMAIN
+ngrok start voice-gpu
+```
+
+### API clients (Pipecat, curl)
+
+Free-plan ngrok shows an interstitial page unless you send:
+
+```
+ngrok-skip-browser-warning: true
+```
+
+`scripts/test-api.sh` and `pipecat_services/` clients include this when the base URL contains `ngrok`.
+
+Set `VOICE_GPU_BASE_URL` in your Pipecat bot `.env` to the same `https://…ngrok-free.dev` URL.
 
 ## Connect Pipecat
 
@@ -201,7 +234,7 @@ voice-gpu-server/
 3. **Chatterbox voice file** — TTS requests fail until `voices/{voice_id}.wav` exists.
 4. **VRAM** — Loading both models may need 12–20 GB depending on precision; use `EAGER_LOAD_MODELS=false` to load on first request.
 5. **Streaming STT** — Canary is batch/segment-based via NeMo `generate()`; Pipecat uses `SegmentedSTTService` with VAD (same pattern as Fal Wizper).
-6. **ngrok** — Free tier URLs rotate on restart; update `VOICE_GPU_BASE_URL` when the tunnel changes.
+6. **ngrok** — use your static free dev domain (`NGROK_URL`); tunnel must stay running. API clients need `ngrok-skip-browser-warning: true` on free plan.
 
 ## Development
 

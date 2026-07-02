@@ -1,0 +1,17 @@
+# ngrok agent config (optional). Copy to ~/.config/ngrok/ngrok.yml or merge.
+# Docs: https://ngrok.com/docs/agent/config/
+#
+# 1. Authenticate once:
+#      ngrok config add-authtoken YOUR_TOKEN
+# 2. Replace YOUR_DEV_DOMAIN with Gateway → Domains in dashboard
+# 3. Start:
+#      ngrok start voice-gpu
+#
+version: 3
+
+endpoints:
+  - name: voice-gpu
+    description: voice-gpu-server TTS/STT API
+    url: https://YOUR_DEV_DOMAIN.ngrok-free.dev
+    upstream:
+      url: 8765

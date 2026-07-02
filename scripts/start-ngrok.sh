@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
-# Expose the voice-gpu-server via ngrok and print the public URL.
+# Expose voice-gpu-server via ngrok (official agent CLI).
+#
+# One-time on the server (if not done already):
+#   ngrok config add-authtoken YOUR_TOKEN
+#
+# Find your static free dev domain: Dashboard → Gateway → Domains
+# Then set NGROK_URL in .env, e.g. https://your-name.ngrok-free.dev
+#
+# Usage:
+#   ./scripts/start-ngrok.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -15,24 +24,53 @@ fi
 
 PORT="${VOICE_GPU_PORT:-8765}"
 NGROK_BIN="${NGROK_BIN:-ngrok}"
+NGROK_URL="${NGROK_URL:-${NGROK_DOMAIN:-}}"
 
 if ! command -v "${NGROK_BIN}" >/dev/null 2>&1; then
-  echo "ngrok not found. Install from https://ngrok.com/download" >&2
+  echo "ngrok not found. Install: https://ngrok.com/download" >&2
   exit 1
 fi
 
-if [[ -z "${NGROK_AUTHTOKEN:-}" ]]; then
-  echo "Set NGROK_AUTHTOKEN in .env (get one at https://dashboard.ngrok.com/get-started/your-authtoken)" >&2
+# Optional: write token from .env (run once; stored in ~/.config/ngrok/ngrok.yml)
+if [[ -n "${NGROK_AUTHTOKEN:-}" ]]; then
+  "${NGROK_BIN}" config add-authtoken "${NGROK_AUTHTOKEN}" >/dev/null 2>&1 || true
+fi
+
+# Verify agent is authenticated (per ngrok docs — token in ngrok.yml)
+if ! "${NGROK_BIN}" config check >/dev/null 2>&1; then
+  cat >&2 <<EOF
+ngrok is not authenticated on this machine.
+
+Run once (get token from https://dashboard.ngrok.com/get-started/your-authtoken):
+
+  ngrok config add-authtoken YOUR_TOKEN
+
+Or set NGROK_AUTHTOKEN in ${ENV_FILE}
+EOF
   exit 1
 fi
 
-"${NGROK_BIN}" config add-authtoken "${NGROK_AUTHTOKEN}" >/dev/null 2>&1 || true
+# Normalize URL (free static dev domain from your account)
+if [[ -n "${NGROK_URL}" && "${NGROK_URL}" != http* ]]; then
+  NGROK_URL="https://${NGROK_URL}"
+fi
 
-echo "Starting ngrok tunnel to localhost:${PORT} ..."
-echo "After ngrok starts, copy the https URL into VOICE_GPU_BASE_URL in:"
-echo "  - ${PROJECT_ROOT}/.env"
-echo "  - pipecat/.env (for my-bot-gpu.py)"
+echo "Starting ngrok → localhost:${PORT}"
+if [[ -n "${NGROK_URL}" ]]; then
+  echo "Using static dev domain: ${NGROK_URL}"
+  echo "Set VOICE_GPU_BASE_URL=${NGROK_URL} in ${ENV_FILE} and pipecat/.env"
+else
+  echo "No NGROK_URL set — ngrok will use your account's assigned dev domain."
+  echo "Find it in Dashboard → Gateway → Domains, then add NGROK_URL to .env"
+fi
 echo ""
+echo "Free-plan API clients must send header: ngrok-skip-browser-warning: true"
+echo "Local inspector: http://127.0.0.1:4040"
 echo "Press Ctrl+C to stop."
+echo ""
 
-exec "${NGROK_BIN}" http "${PORT}" --log=stdout
+if [[ -n "${NGROK_URL}" ]]; then
+  exec "${NGROK_BIN}" http "${PORT}" --url="${NGROK_URL}" --log=stdout
+else
+  exec "${NGROK_BIN}" http "${PORT}" --log=stdout
+fi
