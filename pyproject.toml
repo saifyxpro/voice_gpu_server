@@ -1,0 +1,56 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "voice-gpu-server"
+version = "0.1.0"
+description = "GPU voice server (Chatterbox TTS + Canary STT) for Pipecat bots"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "aiofiles>=24.1.0",
+    "fastapi>=0.115.0",
+    "loguru>=0.7.3",
+    "numpy>=1.26.4",
+    "pydantic>=2.10.0",
+    "python-dotenv>=1.0.0",
+    "python-multipart>=0.0.20",
+    "scipy>=1.14.0",
+    "soundfile>=0.12.1",
+    "torch>=2.6.0",
+    "torchaudio>=2.6.0",
+    "uvicorn[standard]>=0.34.0",
+    "chatterbox-tts>=0.1.0",
+]
+
+[project.optional-dependencies]
+stt = [
+    # Install on H100 with PyTorch 2.6+ and CUDA 12.x:
+    # uv pip install "nemo_toolkit[asr] @ git+https://github.com/NVIDIA/NeMo.git"
+]
+pipecat = [
+    "aiohttp>=3.11.12",
+]
+dev = [
+    "httpx>=0.28.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.25.0",
+]
+
+[project.scripts]
+voice-gpu-server = "voice_gpu_server.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["voice_gpu_server", "pipecat_services"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.uv]
+override-dependencies = [
+    # chatterbox-tts -> librosa pins an old numba; override for Python 3.11+
+    "numba>=0.61.2",
+    "llvmlite>=0.44.0",
+]

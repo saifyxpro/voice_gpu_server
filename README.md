@@ -1,0 +1,191 @@
+# Voice GPU Server
+
+GPU-hosted TTS and STT APIs for Pipecat voice bots. Runs on an NVIDIA H100 (or any CUDA GPU) and keeps the LLM on OpenRouter in the cloud.
+
+| Component | Model | Where it runs |
+|-----------|-------|---------------|
+| **TTS** | [ResembleAI/chatterbox-turbo](https://huggingface.co/ResembleAI/chatterbox-turbo) | GPU |
+| **STT** | [nvidia/canary-qwen-2.5b](https://huggingface.co/nvidia/canary-qwen-2.5b) | GPU |
+| **LLM** | OpenRouter (e.g. `inception/mercury-2`) | Cloud |
+
+## Prerequisites (H100 server)
+
+- Linux with NVIDIA driver + CUDA 12.x
+- Python 3.11+
+- [uv](https://docs.astral.sh/uv/)
+- ~16 GB+ VRAM recommended (both models loaded; TTS alone is lighter)
+- Hugging Face access for model downloads
+
+### Install CUDA PyTorch (example)
+
+```bash
+uv pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+```
+
+### Install NeMo for STT (required for Canary)
+
+```bash
+uv pip install "nemo_toolkit[asr] @ git+https://github.com/NVIDIA/NeMo.git"
+```
+
+NeMo requires **PyTorch 2.6+** and is the main STT dependency blocker on non-GPU dev machines.
+
+## Quick start
+
+```bash
+cd voice-gpu-server
+cp .env.example .env
+# Edit .env — set VOICE_GPU_API_KEY, add voices/default.wav
+
+uv sync
+uv run voice-gpu-server
+```
+
+Server listens on `http://0.0.0.0:8765` by default.
+
+### Add a voice reference
+
+Chatterbox Turbo needs a ~10s reference clip:
+
+```bash
+cp /path/to/speaker.wav voices/default.wav
+```
+
+See [voices/README.md](voices/README.md) for paralinguistic tags (`[chuckle]`, `[laugh]`, etc.).
+
+## API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/health` | Health + model load status |
+| `GET` | `/v1/voices` | List voice reference files |
+| `POST` | `/v1/tts` | Text → audio (streaming PCM or JSON) |
+| `POST` | `/v1/stt` | WAV upload → transcript |
+
+Auth: set `VOICE_GPU_API_KEY` and pass `Authorization: Bearer <key>` or `X-API-Key: <key>`.
+
+### Examples
+
+**Health check**
+
+```bash
+curl http://localhost:8765/health
+```
+
+**TTS (non-streaming WAV, base64 in JSON)**
+
+```bash
+curl -X POST http://localhost:8765/v1/tts \
+  -H "Authorization: Bearer $VOICE_GPU_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Hi, this is One CoSec calling [chuckle].",
+    "voice_id": "default",
+    "stream": false,
+    "response_format": "wav"
+  }'
+```
+
+**TTS (streaming PCM — used by Pipecat)**
+
+```bash
+curl -N -X POST http://localhost:8765/v1/tts \
+  -H "Authorization: Bearer $VOICE_GPU_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Hello world","stream":true,"response_format":"pcm"}' \
+  --output out.pcm
+# Response headers: X-Sample-Rate, X-Voice-Id, X-Audio-Format
+```
+
+**STT**
+
+```bash
+curl -X POST http://localhost:8765/v1/stt \
+  -H "Authorization: Bearer $VOICE_GPU_API_KEY" \
+  -F "file=@sample.wav"
+```
+
+## Expose via ngrok
+
+For Pipecat clients that cannot reach the H100 directly:
+
+```bash
+# Set NGROK_AUTHTOKEN in .env
+chmod +x scripts/start-ngrok.sh
+./scripts/start-ngrok.sh
+```
+
+Copy the `https://….ngrok-free.app` URL into:
+
+- `VOICE_GPU_BASE_URL` in `voice-gpu-server/.env`
+- `VOICE_GPU_BASE_URL` in `pipecat/.env` (for the bot)
+
+## Connect Pipecat
+
+A companion bot is at `pipecat/my-bot-gpu.py`. It uses:
+
+- `VoiceGpuSTTService` — segmented STT over HTTP
+- `VoiceGpuTTSService` — streaming TTS over HTTP
+- `OpenRouterLLMService` — cloud LLM (unchanged)
+
+```bash
+cd ../pipecat
+cp ../voice-gpu-server/.env.example .env  # or merge keys
+# Set OPENROUTER_API_KEY, VOICE_GPU_BASE_URL, VOICE_GPU_API_KEY
+
+uv run python my-bot-gpu.py
+```
+
+Pipecat service classes live in `pipecat_services/` and are imported via `sys.path` — no fork of Pipecat required.
+
+### Environment variables (Pipecat)
+
+| Variable | Purpose |
+|----------|---------|
+| `VOICE_GPU_BASE_URL` | GPU server URL (local or ngrok) |
+| `VOICE_GPU_API_KEY` | Must match server key |
+| `DEFAULT_VOICE_ID` | Chatterbox voice reference name |
+| `OPENROUTER_API_KEY` | Cloud LLM |
+| `OPENROUTER_MODEL` | Optional, default `inception/mercury-2` |
+
+## Configuration
+
+See [.env.example](.env.example). Key options:
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `TTS_DEVICE` | `cuda` | Chatterbox device |
+| `STT_DEVICE` | `cuda` | Canary device |
+| `EAGER_LOAD_MODELS` | `false` | `true` loads at startup |
+| `VOICES_DIR` | `./voices` | Reference WAV files |
+| `STT_SAMPLE_RATE` | `16000` | Canary expects 16 kHz mono |
+
+## Project layout
+
+```
+voice-gpu-server/
+├── voice_gpu_server/     # FastAPI app + model loaders
+├── pipecat_services/     # Pipecat TTS/STT HTTP clients
+├── scripts/start-ngrok.sh
+├── voices/               # Custom voice references (*.wav)
+├── pyproject.toml
+└── README.md
+```
+
+## Known blockers / notes
+
+1. **NeMo install** — Canary STT needs NeMo from GitHub; first install can take 10+ minutes.
+2. **CUDA** — CPU fallback is possible for dev (`TTS_DEVICE=cpu`) but too slow for real-time voice.
+3. **Chatterbox voice file** — TTS requests fail until `voices/{voice_id}.wav` exists.
+4. **VRAM** — Loading both models may need 12–20 GB depending on precision; use `EAGER_LOAD_MODELS=false` to load on first request.
+5. **Streaming STT** — Canary is batch/segment-based via NeMo `generate()`; Pipecat uses `SegmentedSTTService` with VAD (same pattern as Fal Wizper).
+6. **ngrok** — Free tier URLs rotate on restart; update `VOICE_GPU_BASE_URL` when the tunnel changes.
+
+## Development
+
+```bash
+uv sync --extra dev
+uv run pytest
+```
+
+Health endpoint works without GPU models loaded; TTS/STT endpoints lazy-load on first use.
