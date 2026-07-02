@@ -114,6 +114,9 @@ class ChatterboxTTSModel:
         logger.info("Loading Chatterbox Turbo on device={}", self._device)
         self._model = ChatterboxTurboTTS.from_pretrained(device=self._device)
         self._sample_rate = int(self._model.sr)
+        from voice_gpu_server.chatterbox_streaming import _patch_chatterbox_flow_streaming
+
+        _patch_chatterbox_flow_streaming()
         self._load_error = None
         logger.info("Chatterbox Turbo loaded (sample_rate={})", self._sample_rate)
 
@@ -218,15 +221,38 @@ class ChatterboxTTSModel:
         from voice_gpu_server.chatterbox_streaming import stream_turbo_pcm
 
         assert self._model is not None
-        yield from stream_turbo_pcm(
-            self._model,
-            text,
-            chunk_tokens=settings.tts_stream_chunk_tokens,
-            crossfade_ms=settings.tts_stream_crossfade_ms,
-            max_gen_len=settings.tts_max_gen_len,
-            n_cfm_timesteps=settings.tts_n_cfm_timesteps,
-            **self._generation_kwargs(),
-        )
+        try:
+            yield from stream_turbo_pcm(
+                self._model,
+                text,
+                chunk_tokens=settings.tts_stream_chunk_tokens,
+                crossfade_ms=settings.tts_stream_crossfade_ms,
+                max_gen_len=settings.tts_max_gen_len,
+                n_cfm_timesteps=settings.tts_n_cfm_timesteps,
+                **self._generation_kwargs(),
+            )
+        except RuntimeError as exc:
+            logger.warning("TTS streaming failed ({}), using batch generate fallback", exc)
+            pcm, _ = self._synthesize_batch_pcm(text)
+            step = max(1, settings.tts_stream_chunk_tokens * 480)
+            for offset in range(0, len(pcm), step):
+                yield pcm[offset : offset + step]
+
+    def _synthesize_batch_pcm(self, text: str) -> tuple[bytes, int]:
+        """Batch generate full utterance (watermarked path)."""
+        assert self._model is not None
+        with torch.inference_mode():
+            wav = self._model.generate(
+                text,
+                norm_loudness=settings.tts_norm_loudness,
+                **self._generation_kwargs(),
+            )
+        if isinstance(wav, torch.Tensor):
+            pcm = float_audio_to_pcm16(wav)
+        else:
+            audio = np.clip(np.asarray(wav).squeeze(), -1.0, 1.0)
+            pcm = (audio * 32767).astype(np.int16).tobytes()
+        return pcm, int(self._model.sr)
 
     def _stream_via_native_api(self, text: str) -> Iterator[bytes]:
         """Use upstream ``ChatterboxTurboTTS.stream()`` when available."""
@@ -246,21 +272,8 @@ class ChatterboxTTSModel:
         assert self._model is not None
         with self._sync_lock:
             self._activate_voice_sync(voice_id, voice_path)
-
-            with torch.inference_mode():
-                wav = self._model.generate(
-                    text,
-                    norm_loudness=settings.tts_norm_loudness,
-                    **self._generation_kwargs(),
-                )
-
-            if isinstance(wav, torch.Tensor):
-                pcm = float_audio_to_pcm16(wav)
-            else:
-                audio = np.clip(np.asarray(wav).squeeze(), -1.0, 1.0)
-                pcm = (audio * 32767).astype(np.int16).tobytes()
-
-            return pcm, int(self._model.sr)
+            pcm, sample_rate = self._synthesize_batch_pcm(text)
+            return pcm, sample_rate
 
 
 def create_tts_model() -> ChatterboxTTSModel:

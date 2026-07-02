@@ -27,6 +27,100 @@ from chatterbox.tts_turbo import punc_norm
 from voice_gpu_server.audio_utils import float_audio_to_pcm16
 
 
+def _patch_chatterbox_flow_streaming() -> None:
+    """Backport resemble-ai/chatterbox#528: trim h_masks when streaming (finalize=False).
+
+    chatterbox-tts 0.1.3 trims encoder output ``h`` but not ``h_masks``, causing
+    RuntimeError (mask vs activation size mismatch) during S3GenStreamer flush.
+    """
+    try:
+        from chatterbox.models.s3gen.flow import CausalMaskedDiffWithXvec, _repeat_batch_dim
+        from chatterbox.models.s3gen.utils.mask import make_pad_mask
+    except ImportError:
+        return
+
+    if getattr(CausalMaskedDiffWithXvec, "_vgs_streaming_patch", False):
+        return
+
+    import logging
+
+    import torch
+    from torch.nn import functional as F
+
+    flow_logger = logging.getLogger("chatterbox.models.s3gen.flow")
+
+    @torch.inference_mode()
+    def patched_inference(
+        self,
+        token,
+        token_len,
+        prompt_token,
+        prompt_token_len,
+        prompt_feat,
+        prompt_feat_len,
+        embedding,
+        finalize,
+        n_timesteps=10,
+        noised_mels=None,
+        meanflow=False,
+    ):
+        B = token.size(0)
+        embedding = torch.atleast_2d(embedding)
+        embedding = F.normalize(embedding, dim=1)
+        embedding = self.spk_embed_affine_layer(embedding)
+
+        prompt_token = _repeat_batch_dim(prompt_token, B, ndim=2)
+        prompt_token_len = _repeat_batch_dim(prompt_token_len, B, ndim=1)
+        prompt_feat = _repeat_batch_dim(prompt_feat, B, ndim=3)
+        prompt_feat_len = _repeat_batch_dim(prompt_feat_len, B, ndim=1)
+        embedding = _repeat_batch_dim(embedding, B, ndim=2)
+
+        token, token_len = torch.concat([prompt_token, token], dim=1), prompt_token_len + token_len
+        mask = (~make_pad_mask(token_len)).unsqueeze(-1).to(embedding)
+
+        if (token >= self.vocab_size).any():
+            flow_logger.error(
+                "%s>%s out-of-range special tokens in flow", token.max(), self.vocab_size
+            )
+            token = self.input_embedding(token.long()) * mask
+
+        h, h_masks = self.encoder(token, token_len)
+        if finalize is False:
+            lookahead_frames = self.pre_lookahead_len * self.token_mel_ratio
+            h = h[:, :-lookahead_frames]
+            h_masks = h_masks[:, :, :-lookahead_frames]
+
+        h_lengths = h_masks.sum(dim=-1).squeeze(dim=-1)
+        mel_len1, mel_len2 = prompt_feat.shape[1], h.shape[1] - prompt_feat.shape[1]
+        h = self.encoder_proj(h)
+
+        conds = torch.zeros([B, mel_len1 + mel_len2, self.output_size], device=token.device).to(
+            h.dtype
+        )
+        conds[:, :mel_len1] = prompt_feat
+        conds = conds.transpose(1, 2)
+
+        mask = (~make_pad_mask(h_lengths)).unsqueeze(1).to(h)
+        if mask.shape[0] != B:
+            mask = mask.repeat(B, 1, 1)
+
+        feat, _ = self.decoder(
+            mu=h.transpose(1, 2).contiguous(),
+            mask=mask,
+            spks=embedding,
+            cond=conds,
+            n_timesteps=n_timesteps,
+            noised_mels=noised_mels,
+            meanflow=meanflow,
+        )
+        feat = feat[:, :, mel_len1:]
+        assert feat.shape[2] == mel_len2
+        return feat, None
+
+    CausalMaskedDiffWithXvec.inference = patched_inference
+    CausalMaskedDiffWithXvec._vgs_streaming_patch = True
+
+
 class S3GenStreamer:
     """Incrementally decode S3 speech tokens into waveform chunks."""
 
@@ -260,6 +354,7 @@ def stream_turbo_pcm(
     n_cfm_timesteps: int,
 ) -> Iterator[bytes]:
     """Yield 16-bit PCM chunks while Turbo speech is still being generated."""
+    _patch_chatterbox_flow_streaming()
     if model.conds is None:
         raise RuntimeError("Voice conditionals not prepared — call prepare_conditionals first")
 
