@@ -165,7 +165,7 @@ PY
 # --- 3. TTS kelvin (non-streaming WAV + expressive tags) ---
 echo ""
 echo "--- 3. TTS (kelvin, non-streaming WAV + expressive tags) ---"
-KELVIN_TEXT="Hi, good afternoon. [clear throat] This is Kevin from One CoSec, ah [chuckle]. Got a few reminders about your AGM and filing dates lor. [sigh] Don't worry lah, quite straightforward one. You free now to talk, or you prefer I send everything by email instead hor?"
+KELVIN_TEXT="Hi, good afternoon. This is Kevin from One CoSec, ah [chuckle]. Got a few reminders about your AGM and filing dates lor. Don't worry lah, quite straightforward one. You free now to talk or not?"
 echo "text: ${KELVIN_TEXT}"
 tts_payload kelvin false wav "$KELVIN_TEXT" "${OUT_DIR}/payload-kelvin.json"
 TTS_RAW=$(curl "${CURL_OPTS[@]}" "${NGROK_HDR[@]}" "${AUTH[@]}" \
@@ -193,7 +193,7 @@ test -s "${OUT_DIR}/tts-kelvin.wav" && pass "TTS kelvin WAV saved" || fail "TTS 
 # --- 4. TTS lim (non-streaming WAV + expressive tags) ---
 echo ""
 echo "--- 4. TTS (lim, non-streaming WAV + expressive tags) ---"
-LIM_TEXT="Hello, Lim here from One CoSec again, ah. [clear throat] Just a gentle reminder leh — your annual return deadline coming up already, so I thought I'll give you a quick call. Nothing to panic about lah [chuckle]. If you already submitted, can let me know hor? Otherwise I can walk you through the steps now — you got five minutes or not?"
+LIM_TEXT="Hello, Lim here from One CoSec again, ah. Just a gentle reminder leh — your annual return deadline coming up already. Nothing to panic about lah [chuckle]. You got five minutes or not?"
 echo "text: ${LIM_TEXT}"
 tts_payload lim false wav "$LIM_TEXT" "${OUT_DIR}/payload-lim.json"
 TTS_LIM_RAW=$(curl "${CURL_OPTS[@]}" "${NGROK_HDR[@]}" "${AUTH[@]}" \
@@ -222,7 +222,7 @@ test -s "${OUT_DIR}/tts-lim.wav" && pass "TTS lim WAV saved" || fail "TTS lim ou
 echo ""
 echo "--- 5. TTS streaming PCM (kelvin + lim) ---"
 for VOICE in kelvin lim; do
-  STREAM_TEXT="Hey there [chuckle], quick test from ${VOICE}, ah. Can hear me okay or not?"
+  STREAM_TEXT="Hey there, quick test from ${VOICE}, ah. Can hear me okay or not?"
   echo "streaming ${VOICE}: ${STREAM_TEXT}"
   tts_payload "$VOICE" true pcm "$STREAM_TEXT" "${OUT_DIR}/payload-${VOICE}-stream.json"
   TTS_STREAM_CODE=$(curl "${CURL_OPTS[@]}" "${NGROK_HDR[@]}" "${AUTH[@]}" \

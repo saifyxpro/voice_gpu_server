@@ -174,7 +174,7 @@ ngrok-skip-browser-warning: true
 ./scripts/test-api.sh
 ```
 
-The script exercises **both voices** (`kelvin`, `lim`) with Singlish sample text and Chatterbox expressive tags (`[chuckle]`, `[laugh]`, `[clear throat]`, `[sigh]`, etc.). See [voices/README.md](voices/README.md#paralinguistic-tags) for all nine supported tags. Outputs land in `.test-output/`:
+The script exercises **both voices** (`kelvin`, `lim`) with Singlish sample text and **one** Chatterbox tag per WAV test (`[chuckle]`). See [voices/README.md](voices/README.md#paralinguistic-tags) and `.cursor/skills/chatterbox-paralinguistic-tags/` for tag rules. Outputs land in `.test-output/`:
 
 | File | Test |
 |------|------|

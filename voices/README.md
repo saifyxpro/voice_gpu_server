@@ -98,8 +98,8 @@ Source: [Chatterbox Turbo Gradio demo](https://github.com/resemble-ai/chatterbox
 1. **Copy tags exactly** — `[clear throat]` not `[clears throat]`; `[chuckle]` not `[chuckles]`; `[sigh]` not `[sighs]`.
 2. **Lowercase only** — `[Laugh]` and `[CHUCKLE]` are not supported.
 3. **Place at natural boundaries** — before or after a clause where a human would react, not mid-word.
-4. **Use sparingly** — one or two tags per sentence is enough; stacking many sounds theatrical.
-5. **Singlish + tags** — keep particles (*lah*, *lor*, *hor*) in the spoken text; put tags on the English phrases around them.
+4. **Use sparingly** — **0–1 tag per call turn** for outbound scripts; max 2 on a long (~30 s) script. Overuse sounds theatrical (see `.cursor/skills/chatterbox-paralinguistic-tags/SKILL.md`).
+5. **Singlish + tags** — keep particles (*lah*, *lor*, *hor*) in the spoken text; at most one tag on the English phrases around them.
 
 ### Examples
 
@@ -109,16 +109,16 @@ Short:
 Hi there, Sarah here [chuckle], do you have a minute to chat?
 ```
 
-Outbound call (One CoSec style):
+Outbound call (One CoSec style) — **one tag**:
 
 ```
-Hi, good afternoon. [clear throat] This is Kevin from One CoSec, ah. Got a few reminders about your AGM lor. [sigh] Don't worry lah, quite straightforward one. [chuckle] You free now to talk or not?
+Hi, good afternoon. This is Kevin from One CoSec, ah. Got a few reminders about your AGM and filing dates lor. Don't worry lah, quite straightforward one [chuckle]. You free now to talk or not?
 ```
 
-Surprise / empathy:
+Surprise / empathy — **one tag**:
 
 ```
-Oh, your deadline was yesterday? [gasp] Okay okay, [sigh] we can still fix this — let me walk you through it now.
+Oh, your deadline was yesterday? [gasp] Okay okay, we can still fix this — let me walk you through it now.
 ```
 
 API request:
@@ -127,8 +127,10 @@ API request:
 curl -X POST http://localhost:8765/v1/tts \
   -H "Authorization: Bearer $VOICE_GPU_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"text":"Hello from One CoSec, ah [chuckle]. [clear throat] Your filing deadline coming up already lor [sigh] — nothing to panic about.","voice_id":"kelvin","stream":false,"response_format":"wav"}'
+  -d '{"text":"Hi, Kevin from One CoSec, ah [chuckle]. Got two minutes or not?","voice_id":"kelvin","stream":false,"response_format":"wav"}'
 ```
+
+> **Agent skill:** `.cursor/skills/chatterbox-paralinguistic-tags/` — when writing scripts, follow the sparing-use budgets there (don't stack tags).
 
 ### Chatterbox vs ElevenLabs v3
 
@@ -162,7 +164,7 @@ Use these scripts when **recording a reference clip** or **generating a test sam
 ### Sample 1 — Neutral / general
 
 ```
-Good morning. [clear throat] My name is Alex — I'm calling to follow up on your recent enquiry, ah. I wanted to check whether you got any questions about the information we sent over last week. If now not a good time, I can call back later lor — [sigh] just let me know what works best for you. Otherwise, I'm happy to walk through the details right now.
+Good morning. My name is Alex — I'm calling to follow up on your recent enquiry, ah. I wanted to check whether you got any questions about the information we sent over last week. If now not a good time, I can call back later lor — just let me know what works best for you.
 ```
 
 ### Sample 2 — Outbound caller (professional, warm)
@@ -174,27 +176,19 @@ Hi, this is Sarah calling from One CoSec, ah. I'm reaching out because we notice
 ### Sample 3 — Conversational with expressive tags
 
 ```
-Hey there [chuckle], thanks for picking up, ah. So, I was looking at your account and thought I'll give you a quick ring. Nothing urgent lah — just wanted to check everything running smoothly on your end or not. [sigh] If you got a minute, I can share a couple of updates that might save you some time this month hor. What do you think?
+Hey there, thanks for picking up, ah. So, I was looking at your account and thought I'll give you a quick ring. Nothing urgent lah — just wanted to check everything running smoothly on your end or not. If you got a minute, I can share a couple of updates that might save you some time this month hor. What do you think?
 ```
 
 ### Sample 4 — Singlish / local tone (One CoSec style)
 
 ```
-Hi, good afternoon. This is Kevin from One CoSec, ah. I'm calling to touch base on your corporate secretary matters — got a few reminders about your AGM and filing dates lor. [sigh] Don't worry lah, quite straightforward one. You free now to talk, or you prefer I send everything by email instead hor?
+Hi, good afternoon. This is Kevin from One CoSec, ah. I'm calling to touch base on your corporate secretary matters — got a few reminders about your AGM and filing dates lor. Don't worry lah, quite straightforward one. You free now to talk, or you prefer I send everything by email instead hor?
 ```
 
 ### Sample 5 — Singlish reminder call (One CoSec style)
 
 ```
-Hello, Kevin here from One CoSec again, ah. [clear throat] Just a gentle reminder leh — your annual return deadline coming up already, so I thought I'll give you a quick call. Nothing to panic about lah. [chuckle] If you already submitted, can let me know hor? Otherwise I can walk you through the steps now — you got five minutes or not?
-```
-
-### Sample 6 — Tag showcase (all nine reactions)
-
-Use this to **hear every supported tag** in one pass (trim sections for shorter tests):
-
-```
-[clear throat] Hi, this is a quick voice test from One CoSec, ah. [sigh] Sometimes filings can feel like a lot lor. [cough] Anyway — [chuckle] the good news is we can handle most of it for you. [gasp] Wait, your deadline is tomorrow? [groan] Okay okay, still got time. [sniff] Let me pull up your file. [shush] Keep this between us hor — [laugh] I'm joking lah, everything above board one.
+Hello, Kevin here from One CoSec again, ah. Just a gentle reminder leh — your annual return deadline coming up already, so I thought I'll give you a quick call. Nothing to panic about lah [chuckle]. If you already submitted, can let me know hor? Otherwise I can walk you through the steps now — you got five minutes or not?
 ```
 
 #### Singlish notes for TTS
