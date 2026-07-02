@@ -15,24 +15,39 @@ GPU-hosted TTS and STT APIs for voice bots. Runs on an NVIDIA H100 (or any CUDA 
 - ~16 GB+ VRAM recommended (both models loaded; TTS alone is lighter)
 - Hugging Face access for model downloads
 
-### H100 install (Python 3.12) — use ONE environment
+### Lightning AI Studio (recommended)
 
-**Do not mix** `uv sync` (creates `.venv`) with `uv pip install` into conda — packages end up in different places and `uv run` breaks (`torch._utils`, missing `nemo`).
+Per [Lightning AI Studio docs](https://lightning.ai/docs/platform/build/ai-studio):
 
-**Recommended (Lightning / conda `cloudspace`):**
+- Studios **persist** pip/conda packages automatically under `/teamspace/studios/this_studio`
+- Each Studio has **one conda env** (`cloudspace`) — install like a laptop: `pip install` in terminal
+- Install on **free CPU** first, switch to **GPU** when ready to run (saves credits)
+- **Do not** use `uv run` or `uv sync` — they create a separate `.venv` and break torch/chatterbox/nemo
 
 ```bash
 cd voice_gpu_server
 cp .env.example .env
 conda activate cloudspace
 
-chmod +x scripts/setup-h100.sh scripts/run-server.sh
-./scripts/setup-h100.sh          # installs into cloudspace only
-./scripts/run-server.sh          # start API (terminal 1)
-./scripts/start-ngrok.sh         # start tunnel (terminal 2)
+chmod +x scripts/setup-lightning.sh scripts/run-server.sh scripts/start-ngrok.sh
+./scripts/setup-lightning.sh     # once — persists across Studio restarts
+
+# Terminal 1 — API
+./scripts/run-server.sh        # uses: python -m voice_gpu_server
+
+# Terminal 2 — ngrok (set NGROK_URL in .env first)
+./scripts/start-ngrok.sh
 ```
 
-Always use **`uv run --active`** or **`./scripts/run-server.sh`** so the server uses the same env where Chatterbox + NeMo were installed.
+### Other H100 / bare-metal GPU
+
+**Do not mix** `uv sync` (creates `.venv`) with `uv pip install` into conda.
+
+```bash
+conda activate your-gpu-env
+./scripts/setup-h100.sh
+python -m voice_gpu_server
+```
 
 **Alternative — uv-managed `.venv` only (no conda):**
 
@@ -40,12 +55,11 @@ Always use **`uv run --active`** or **`./scripts/run-server.sh`** so the server 
 rm -rf .venv
 uv python install 3.12
 uv sync --python 3.12
-uv pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
-uv pip install "nemo_toolkit[asr] @ git+https://github.com/NVIDIA/NeMo.git"
+uv pip install --python .venv/bin/python torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+uv pip install --python .venv/bin/python chatterbox-tts
+uv pip install --python .venv/bin/python "nemo_toolkit[asr] @ git+https://github.com/NVIDIA/NeMo.git"
 uv run voice-gpu-server
 ```
-
-Do **not** run `uv pip install` into conda and then `uv run` without `--active`.
 
 Server listens on `http://0.0.0.0:8765` by default.
 
