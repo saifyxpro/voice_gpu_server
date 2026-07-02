@@ -204,7 +204,7 @@ See [.env.example](.env.example). Key options:
 |----------|---------|-------|
 | `TTS_DEVICE` | `cuda` | Chatterbox device |
 | `STT_DEVICE` | `cuda` | Canary device |
-| `EAGER_LOAD_MODELS` | `false` | `true` loads at startup |
+| `EAGER_LOAD_MODELS` | `true` | Downloads and loads models at startup |
 | `VOICES_DIR` | `./voices` | Reference WAV files |
 | `STT_SAMPLE_RATE` | `16000` | Canary expects 16 kHz mono |
 
@@ -223,11 +223,12 @@ voice-gpu-server/
 ## Known blockers / notes
 
 1. **NeMo install** — Canary STT needs NeMo from GitHub; first install can take 10+ minutes.
-2. **CUDA** — CPU fallback is possible for dev (`TTS_DEVICE=cpu`) but too slow for real-time voice.
-3. **Chatterbox voice file** — TTS requests fail until `voices/{voice_id}.wav` exists.
-4. **VRAM** — Loading both models may need 12–20 GB depending on precision; use `EAGER_LOAD_MODELS=false` to load on first request.
-5. **Streaming STT** — Canary is batch/segment-based via NeMo `generate()`; Pipecat uses `SegmentedSTTService` with VAD (same pattern as Fal Wizper).
-6. **ngrok** — use your static free dev domain (`NGROK_URL`); tunnel must stay running. API clients need `ngrok-skip-browser-warning: true` on free plan.
+2. **Chatterbox / perth** — If TTS fails with `'NoneType' object is not callable` at `PerthImplicitWatermarker`, run `./scripts/setup-lightning.sh` (installs `setuptools` + `peft`). The server also applies a no-op watermarker fallback automatically.
+3. **CUDA** — CPU fallback is possible for dev (`TTS_DEVICE=cpu`) but too slow for real-time voice.
+4. **Chatterbox voice file** — TTS requests fail until `voices/{voice_id}.wav` exists.
+5. **VRAM** — Loading both models may need 12–20 GB depending on precision; set `EAGER_LOAD_MODELS=false` to load on first request instead.
+6. **Streaming STT** — Canary is batch/segment-based via NeMo `generate()`; Pipecat uses `SegmentedSTTService` with VAD (same pattern as Fal Wizper).
+7. **ngrok** — use your static free dev domain (`NGROK_URL`); tunnel must stay running. API clients need `ngrok-skip-browser-warning: true` on free plan.
 
 ## Development
 
@@ -236,4 +237,4 @@ uv sync --extra dev
 uv run pytest
 ```
 
-Health endpoint works without GPU models loaded; TTS/STT endpoints lazy-load on first use.
+Health endpoint works without GPU models loaded. With `EAGER_LOAD_MODELS=true` (default), TTS and STT download and load when the server starts.

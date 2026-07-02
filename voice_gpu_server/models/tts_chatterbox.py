@@ -13,6 +13,34 @@ from loguru import logger
 from voice_gpu_server.config import settings
 
 
+def _patch_perth_watermarker() -> None:
+    """Fix broken resemble-perth when pkg_resources/setuptools is missing (common with uv)."""
+    try:
+        import setuptools  # noqa: F401 — provides pkg_resources for perth
+    except ImportError:
+        pass
+
+    try:
+        import perth
+    except ImportError:
+        logger.warning("resemble-perth not installed — Chatterbox may fail to load")
+        return
+
+    if perth.PerthImplicitWatermarker is not None:
+        return
+
+    logger.warning(
+        "perth.PerthImplicitWatermarker is broken — using no-op watermarker. "
+        "For full watermarking run: pip install setuptools peft"
+    )
+
+    class _NoOpWatermarker:
+        def apply_watermark(self, wav, sample_rate=None):
+            return wav
+
+    perth.PerthImplicitWatermarker = _NoOpWatermarker
+
+
 class ChatterboxTTSModel:
     """Lazy-loaded Chatterbox Turbo TTS."""
 
@@ -75,6 +103,7 @@ class ChatterboxTTSModel:
                 raise
 
     def _load_sync(self) -> None:
+        _patch_perth_watermarker()
         from chatterbox.tts_turbo import ChatterboxTurboTTS
 
         logger.info("Loading Chatterbox Turbo on device={}", self._device)

@@ -62,6 +62,10 @@ echo "=== Verify PyTorch stack ==="
 "${PY}" -c "import torch, torchvision; print('torch', torch.__version__, '| torchvision', torchvision.__version__, '| cuda', torch.cuda.is_available())"
 
 echo ""
+echo "=== Chatterbox TTS deps (perth watermarker fix) ==="
+pip_install setuptools peft
+
+echo ""
 echo "=== Chatterbox TTS ==="
 pip_install "chatterbox-tts>=0.1.3"
 
@@ -71,6 +75,13 @@ pip_install "nemo_toolkit[asr] @ git+https://github.com/NVIDIA/NeMo.git"
 
 echo ""
 echo "=== Verify imports ==="
+"${PY}" -c "
+import perth
+from voice_gpu_server.models.tts_chatterbox import _patch_perth_watermarker
+_patch_perth_watermarker()
+assert perth.PerthImplicitWatermarker is not None
+print('perth watermarker ok')
+"
 "${PY}" -c "from chatterbox.tts_turbo import ChatterboxTurboTTS; print('chatterbox ok')"
 "${PY}" -c "import nemo; print('nemo ok')"
 "${PY}" -c "import torch; print('torch', torch.__version__, 'cuda', torch.cuda.is_available())"

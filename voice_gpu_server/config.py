@@ -46,7 +46,7 @@ class Settings:
             api_key=api_key,
             tts_device=os.getenv("TTS_DEVICE", "cuda"),
             stt_device=os.getenv("STT_DEVICE", "cuda"),
-            eager_load_models=os.getenv("EAGER_LOAD_MODELS", "false").lower() == "true",
+            eager_load_models=os.getenv("EAGER_LOAD_MODELS", "true").lower() == "true",
             tts_model=os.getenv("TTS_MODEL", "ResembleAI/chatterbox-turbo"),
             stt_model=os.getenv("STT_MODEL", "nvidia/canary-qwen-2.5b"),
             default_voice_id=os.getenv("DEFAULT_VOICE_ID", "default"),

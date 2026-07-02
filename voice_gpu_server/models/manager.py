@@ -17,14 +17,21 @@ class ModelManager:
         self.stt: CanarySTTModel = create_stt_model()
 
     async def warmup(self) -> None:
-        """Eager-load models when configured."""
-        if settings.eager_load_models:
-            logger.info("Eager loading GPU models...")
-            await self.tts.load()
-            try:
-                await self.stt.load()
-            except Exception:
-                logger.warning("STT model failed to load at startup (TTS may still work)")
+        """Load GPU models at startup (downloads weights on first run)."""
+        if not settings.eager_load_models:
+            logger.info("EAGER_LOAD_MODELS=false — models load on first API request")
+            return
+
+        logger.info("Eager loading Chatterbox TTS (may download from Hugging Face)...")
+        await self.tts.load()
+        logger.info("Chatterbox TTS ready (sample_rate={})", self.tts.sample_rate)
+
+        logger.info("Eager loading Canary STT (may download from Hugging Face)...")
+        try:
+            await self.stt.load()
+            logger.info("Canary STT ready")
+        except Exception as exc:
+            logger.warning("STT failed at startup: {} — TTS will still work", exc)
 
 
 model_manager = ModelManager()
