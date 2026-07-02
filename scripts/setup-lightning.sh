@@ -50,8 +50,16 @@ echo "=== Base server (editable install) ==="
 pip_install -e .
 
 echo ""
-echo "=== CUDA PyTorch ==="
-pip_install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+echo "=== CUDA PyTorch stack (matched cu124 — includes torchvision) ==="
+# Chatterbox/transformers import torchvision; torch+tv must share same CUDA build.
+# Mismatch causes: RuntimeError: operator torchvision::nms does not exist
+pip_install --force-reinstall \
+  torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 \
+  --index-url https://download.pytorch.org/whl/cu124
+
+echo ""
+echo "=== Verify PyTorch stack ==="
+"${PY}" -c "import torch, torchvision; print('torch', torch.__version__, '| torchvision', torchvision.__version__, '| cuda', torch.cuda.is_available())"
 
 echo ""
 echo "=== Chatterbox TTS ==="

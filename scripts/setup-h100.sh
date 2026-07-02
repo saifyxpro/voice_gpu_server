@@ -36,7 +36,9 @@ else
   pip_install -e .
 fi
 
-pip_install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+pip_install --force-reinstall \
+  torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 \
+  --index-url https://download.pytorch.org/whl/cu124
 pip_install "chatterbox-tts>=0.1.3"
 pip_install "nemo_toolkit[asr] @ git+https://github.com/NVIDIA/NeMo.git"
 
