@@ -15,58 +15,37 @@ GPU-hosted TTS and STT APIs for voice bots. Runs on an NVIDIA H100 (or any CUDA 
 - ~16 GB+ VRAM recommended (both models loaded; TTS alone is lighter)
 - Hugging Face access for model downloads
 
-### H100 install (Python 3.12)
+### H100 install (Python 3.12) — use ONE environment
 
-`uv sync` alone may pick Python 3.14 on some hosts, which breaks PyTorch. Pin 3.12:
+**Do not mix** `uv sync` (creates `.venv`) with `uv pip install` into conda — packages end up in different places and `uv run` breaks (`torch._utils`, missing `nemo`).
+
+**Recommended (Lightning / conda `cloudspace`):**
 
 ```bash
 cd voice_gpu_server
 cp .env.example .env
+conda activate cloudspace
 
-# Option A — uv-managed Python 3.12
+chmod +x scripts/setup-h100.sh scripts/run-server.sh
+./scripts/setup-h100.sh          # installs into cloudspace only
+./scripts/run-server.sh          # start API (terminal 1)
+./scripts/start-ngrok.sh         # start tunnel (terminal 2)
+```
+
+Always use **`uv run --active`** or **`./scripts/run-server.sh`** so the server uses the same env where Chatterbox + NeMo were installed.
+
+**Alternative — uv-managed `.venv` only (no conda):**
+
+```bash
+rm -rf .venv
 uv python install 3.12
 uv sync --python 3.12
-
-# Option B — existing conda env (e.g. cloudspace on 3.12)
-conda activate cloudspace
-uv sync --python "$(which python)"
-
-# CUDA PyTorch (after uv sync)
-uv pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
-
-# NeMo for Canary STT
-uv pip install "nemo_toolkit[asr] @ git+https://github.com/NVIDIA/NeMo.git"
-
-uv run voice-gpu-server
-```
-
-### Install CUDA PyTorch only (reference)
-
-```bash
-uv pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
-```
-
-### Install NeMo for STT (required for Canary)
-
-```bash
-uv pip install "nemo_toolkit[asr] @ git+https://github.com/NVIDIA/NeMo.git"
-```
-
-NeMo requires **PyTorch 2.6+** on **Python 3.11–3.13**.
-
-## Quick start
-
-```bash
-cd voice-gpu-server
-cp .env.example .env
-# Edit .env — set VOICE_GPU_API_KEY; add voice WAVs under voices/
-
-uv python install 3.12   # if needed
-uv sync --python 3.12
 uv pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
 uv pip install "nemo_toolkit[asr] @ git+https://github.com/NVIDIA/NeMo.git"
 uv run voice-gpu-server
 ```
+
+Do **not** run `uv pip install` into conda and then `uv run` without `--active`.
 
 Server listens on `http://0.0.0.0:8765` by default.
 
