@@ -231,7 +231,7 @@ class ChatterboxTTSModel:
                 n_cfm_timesteps=settings.tts_n_cfm_timesteps,
                 **self._generation_kwargs(),
             )
-        except RuntimeError as exc:
+        except Exception as exc:
             logger.warning("TTS streaming failed ({}), using batch generate fallback", exc)
             pcm, _ = self._synthesize_batch_pcm(text)
             step = max(1, settings.tts_stream_chunk_tokens * 480)

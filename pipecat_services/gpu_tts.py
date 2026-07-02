@@ -87,10 +87,21 @@ class VoiceGpuTTSService(TTSService):
         """Stream PCM audio from the GPU TTS server."""
         logger.debug(f"{self}: Generating TTS [{text}]")
 
+        async for frame in self._run_tts_request(text, context_id, stream=True):
+            if isinstance(frame, ErrorFrame):
+                logger.warning(f"{self}: streaming failed, retrying non-streaming — {frame.error}")
+                async for retry_frame in self._run_tts_request(text, context_id, stream=False):
+                    yield retry_frame
+                return
+            yield frame
+
+    async def _run_tts_request(
+        self, text: str, context_id: str, *, stream: bool
+    ) -> AsyncGenerator[Frame, None]:
         payload = {
             "text": text,
             "voice_id": self._settings.voice,
-            "stream": True,
+            "stream": stream,
             "response_format": "pcm",
         }
 
@@ -106,6 +117,27 @@ class VoiceGpuTTSService(TTSService):
                 if response.status != 200:
                     error_text = await response.text()
                     yield ErrorFrame(error=f"GPU TTS error ({response.status}): {error_text}")
+                    return
+
+                if not stream:
+                    data = await response.json()
+                    import base64
+
+                    pcm = base64.b64decode(data["audio_base64"])
+                    server_rate = int(data.get("sample_rate", self.sample_rate))
+                    await self.stop_ttfb_metrics()
+                    if server_rate != self.sample_rate:
+                        from pipecat.audio.utils import create_stream_resampler
+
+                        if not hasattr(self, "_resampler"):
+                            self._resampler = create_stream_resampler()
+                        pcm = await self._resampler.resample(pcm, server_rate, self.sample_rate)
+                    yield TTSAudioRawFrame(
+                        audio=pcm,
+                        sample_rate=self.sample_rate,
+                        num_channels=1,
+                        context_id=context_id,
+                    )
                     return
 
                 server_rate = int(response.headers.get("X-Sample-Rate", str(self.sample_rate)))

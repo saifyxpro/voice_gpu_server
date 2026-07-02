@@ -48,6 +48,7 @@ def _patch_chatterbox_flow_streaming() -> None:
     from torch.nn import functional as F
 
     flow_logger = logging.getLogger("chatterbox.models.s3gen.flow")
+    original_inference = CausalMaskedDiffWithXvec.inference
 
     @torch.inference_mode()
     def patched_inference(
@@ -64,6 +65,23 @@ def _patch_chatterbox_flow_streaming() -> None:
         noised_mels=None,
         meanflow=False,
     ):
+        # Batch generate() uses finalize=True — must use the original implementation.
+        if finalize:
+            return original_inference(
+                self,
+                token,
+                token_len,
+                prompt_token,
+                prompt_token_len,
+                prompt_feat,
+                prompt_feat_len,
+                embedding,
+                finalize,
+                n_timesteps=n_timesteps,
+                noised_mels=noised_mels,
+                meanflow=meanflow,
+            )
+
         B = token.size(0)
         embedding = torch.atleast_2d(embedding)
         embedding = F.normalize(embedding, dim=1)
@@ -85,10 +103,9 @@ def _patch_chatterbox_flow_streaming() -> None:
             token = self.input_embedding(token.long()) * mask
 
         h, h_masks = self.encoder(token, token_len)
-        if finalize is False:
-            lookahead_frames = self.pre_lookahead_len * self.token_mel_ratio
-            h = h[:, :-lookahead_frames]
-            h_masks = h_masks[:, :, :-lookahead_frames]
+        lookahead_frames = self.pre_lookahead_len * self.token_mel_ratio
+        h = h[:, :-lookahead_frames]
+        h_masks = h_masks[:, :, :-lookahead_frames]
 
         h_lengths = h_masks.sum(dim=-1).squeeze(dim=-1)
         mel_len1, mel_len2 = prompt_feat.shape[1], h.shape[1] - prompt_feat.shape[1]
@@ -201,16 +218,32 @@ class S3GenStreamer:
             return None
 
         noised_mels = self._ensure_noise(effective_tokens * self.s3gen.flow.token_mel_ratio)
-        output_mels = self.s3gen(
-            speech_tokens=speech_tokens,
-            ref_wav=None,
-            ref_sr=None,
-            ref_dict=self.ref_dict,
-            n_cfm_timesteps=self.n_cfm_timesteps,
-            finalize=finalize,
-            skip_vocoder=True,
-            noised_mels=noised_mels,
-        ).to(dtype=self.s3gen.dtype)
+        try:
+            output_mels = self.s3gen(
+                speech_tokens=speech_tokens,
+                ref_wav=None,
+                ref_sr=None,
+                ref_dict=self.ref_dict,
+                n_cfm_timesteps=self.n_cfm_timesteps,
+                finalize=finalize,
+                skip_vocoder=True,
+                noised_mels=noised_mels,
+            ).to(dtype=self.s3gen.dtype)
+        except RuntimeError:
+            if finalize:
+                raise
+            output_mels = self.s3gen(
+                speech_tokens=speech_tokens,
+                ref_wav=None,
+                ref_sr=None,
+                ref_dict=self.ref_dict,
+                n_cfm_timesteps=self.n_cfm_timesteps,
+                finalize=True,
+                skip_vocoder=True,
+                noised_mels=self._ensure_noise(
+                    speech_tokens.shape[-1] * self.s3gen.flow.token_mel_ratio
+                ),
+            ).to(dtype=self.s3gen.dtype)
 
         wav, source = self.s3gen.hift_inference(output_mels, self.hift_cache_source)
         self.hift_cache_source = source.detach()
