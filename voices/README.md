@@ -1,6 +1,34 @@
 # Custom voice references for Chatterbox Turbo
 
-Chatterbox Turbo requires a **~10 second reference WAV clip** for zero-shot voice cloning.
+Chatterbox Turbo uses **zero-shot voice cloning**: you pass a short reference WAV and the model speaks new text in that speaker's voice. No fine-tuning required.
+
+## How Chatterbox custom voice works
+
+Per [ResembleAI/chatterbox-turbo](https://huggingface.co/ResembleAI/chatterbox-turbo):
+
+1. **Reference clip** — a clean **~10 second** mono WAV of the target speaker (minimal background noise).
+2. **Generate** — Chatterbox clones the voice at inference time via `audio_prompt_path`:
+
+```python
+from chatterbox.tts_turbo import ChatterboxTurboTTS
+
+model = ChatterboxTurboTTS.from_pretrained(device="cuda")
+wav = model.generate(
+    "Hi there, Sarah here [chuckle], do you have a minute?",
+    audio_prompt_path="voices/kelvin.wav",
+)
+```
+
+3. **Paralinguistic tags** — Turbo supports inline tags like `[cough]`, `[laugh]`, `[chuckle]` in the text.
+
+### This repo's voices
+
+| `voice_id` | File | Use |
+|------------|------|-----|
+| `kelvin` | `voices/kelvin.wav` | Kevin-style outbound caller |
+| `lim` | `voices/lim.wav` | Lim-style outbound caller |
+
+Pass `voice_id` per request, or set `DEFAULT_VOICE_ID=kelvin` in `.env`.
 
 ## Add a voice
 
@@ -10,10 +38,36 @@ Chatterbox Turbo requires a **~10 second reference WAV clip** for zero-shot voic
 Example:
 
 ```bash
-cp /path/to/my-speaker-clip.wav voices/default.wav
+cp /path/to/speaker-clip.wav voices/kelvin.wav
 ```
 
-3. Set `DEFAULT_VOICE_ID=default` in `.env` (or pass `voice_id` in TTS requests).
+3. Set `DEFAULT_VOICE_ID=kelvin` in `.env` (optional), or pass `voice_id` in each TTS request.
+
+### API examples
+
+List voices:
+
+```bash
+curl -H "Authorization: Bearer $VOICE_GPU_API_KEY" \
+  http://localhost:8765/v1/voices
+```
+
+TTS with a specific voice:
+
+```bash
+curl -X POST http://localhost:8765/v1/tts \
+  -H "Authorization: Bearer $VOICE_GPU_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Hi, Kevin from One CoSec, ah [chuckle].","voice_id":"kelvin","stream":false,"response_format":"wav"}'
+```
+
+Pipecat bot — set in `.env`:
+
+```bash
+DEFAULT_VOICE_ID=kelvin   # or lim
+```
+
+Or in `my-bot-gpu.py` via `VoiceGpuTTSService(voice_id="lim", ...)`.
 
 ## Paralinguistic tags
 
@@ -44,24 +98,6 @@ Hi there, Sarah here [chuckles], do you have a minute to chat?
 ```
 
 > **Note:** The sample scripts below use **ElevenLabs v3** tag syntax. If you are testing with Chatterbox, swap equivalents where needed (e.g. `[chuckles]` → `[chuckle]`, `[laughs]` → `[laugh]`).
-
-## API
-
-List registered voices:
-
-```bash
-curl -H "Authorization: Bearer $VOICE_GPU_API_KEY" \
-  http://localhost:8765/v1/voices
-```
-
-Use a specific voice:
-
-```bash
-curl -X POST http://localhost:8765/v1/tts \
-  -H "Authorization: Bearer $VOICE_GPU_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"text":"Hello [laugh]","voice_id":"default","stream":false,"response_format":"wav"}'
-```
 
 ## Sample texts (20–30 seconds)
 

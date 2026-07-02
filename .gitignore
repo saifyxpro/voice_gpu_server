@@ -6,7 +6,4 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 uv.lock
-*.mp3
-*.wav
-!voices/*.wav
 ngrok.log
