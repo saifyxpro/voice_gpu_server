@@ -10,12 +10,37 @@ GPU-hosted TTS and STT APIs for voice bots. Runs on an NVIDIA H100 (or any CUDA 
 ## Prerequisites (H100 server)
 
 - Linux with NVIDIA driver + CUDA 12.x
-- Python 3.11+
+- **Python 3.12** (recommended) or 3.11–3.13 — **not 3.14** (PyTorch has no wheels yet)
 - [uv](https://docs.astral.sh/uv/)
 - ~16 GB+ VRAM recommended (both models loaded; TTS alone is lighter)
 - Hugging Face access for model downloads
 
-### Install CUDA PyTorch (example)
+### H100 install (Python 3.12)
+
+`uv sync` alone may pick Python 3.14 on some hosts, which breaks PyTorch. Pin 3.12:
+
+```bash
+cd voice_gpu_server
+cp .env.example .env
+
+# Option A — uv-managed Python 3.12
+uv python install 3.12
+uv sync --python 3.12
+
+# Option B — existing conda env (e.g. cloudspace on 3.12)
+conda activate cloudspace
+uv sync --python "$(which python)"
+
+# CUDA PyTorch (after uv sync)
+uv pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+
+# NeMo for Canary STT
+uv pip install "nemo_toolkit[asr] @ git+https://github.com/NVIDIA/NeMo.git"
+
+uv run voice-gpu-server
+```
+
+### Install CUDA PyTorch only (reference)
 
 ```bash
 uv pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
@@ -27,7 +52,7 @@ uv pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu1
 uv pip install "nemo_toolkit[asr] @ git+https://github.com/NVIDIA/NeMo.git"
 ```
 
-NeMo requires **PyTorch 2.6+** and is the main STT dependency blocker on non-GPU dev machines.
+NeMo requires **PyTorch 2.6+** on **Python 3.11–3.13**.
 
 ## Quick start
 
@@ -36,7 +61,10 @@ cd voice-gpu-server
 cp .env.example .env
 # Edit .env — set VOICE_GPU_API_KEY; add voice WAVs under voices/
 
-uv sync
+uv python install 3.12   # if needed
+uv sync --python 3.12
+uv pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+uv pip install "nemo_toolkit[asr] @ git+https://github.com/NVIDIA/NeMo.git"
 uv run voice-gpu-server
 ```
 

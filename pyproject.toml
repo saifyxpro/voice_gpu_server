@@ -7,7 +7,7 @@ name = "voice-gpu-server"
 version = "0.1.0"
 description = "GPU voice server (Chatterbox TTS + Canary STT) for Pipecat bots"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.14"
 dependencies = [
     "aiofiles>=24.1.0",
     "fastapi>=0.115.0",
@@ -54,3 +54,6 @@ override-dependencies = [
     "numba>=0.61.2",
     "llvmlite>=0.44.0",
 ]
+
+[tool.uv.extra-build-dependencies]
+pkuseg = ["numpy"]
