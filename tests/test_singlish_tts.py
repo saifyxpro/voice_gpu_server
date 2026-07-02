@@ -1,4 +1,4 @@
-from pipecat_services.singlish_tts import normalize_singlish_for_tts
+from pipecat_services.singlish_tts import normalize_singlish_for_tts, prepare_text_for_tts
 
 
 def test_strips_lah_lor_leh():
@@ -20,4 +20,9 @@ def test_keeps_ah_and_english():
 
 def test_tag_only_returns_empty():
     assert normalize_singlish_for_tts("[chuckle]") == ""
-    assert normalize_singlish_for_tts("[sigh] [chuckle]") == ""
+    assert prepare_text_for_tts("[chuckle]") == ""
+
+
+def test_skips_tool_leak_parens():
+    assert prepare_text_for_tts("(") == ""
+    assert prepare_text_for_tts("  )  ") == ""
