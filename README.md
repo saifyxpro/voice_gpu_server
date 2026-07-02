@@ -1,12 +1,11 @@
 # Voice GPU Server
 
-GPU-hosted TTS and STT APIs for Pipecat voice bots. Runs on an NVIDIA H100 (or any CUDA GPU) and keeps the LLM on OpenRouter in the cloud.
+GPU-hosted TTS and STT APIs for voice bots. Runs on an NVIDIA H100 (or any CUDA GPU). LLM is configured separately in your Pipecat client — not part of this server.
 
 | Component | Model | Where it runs |
 |-----------|-------|---------------|
 | **TTS** | [ResembleAI/chatterbox-turbo](https://huggingface.co/ResembleAI/chatterbox-turbo) | GPU |
 | **STT** | [nvidia/canary-qwen-2.5b](https://huggingface.co/nvidia/canary-qwen-2.5b) | GPU |
-| **LLM** | OpenRouter (e.g. `inception/mercury-2`) | Cloud |
 
 ## Prerequisites (H100 server)
 
@@ -35,7 +34,7 @@ NeMo requires **PyTorch 2.6+** and is the main STT dependency blocker on non-GPU
 ```bash
 cd voice-gpu-server
 cp .env.example .env
-# Edit .env — set VOICE_GPU_API_KEY, add voices/default.wav
+# Edit .env — set VOICE_GPU_API_KEY; add voice WAVs under voices/
 
 uv sync
 uv run voice-gpu-server
@@ -48,7 +47,7 @@ Server listens on `http://0.0.0.0:8765` by default.
 Chatterbox Turbo needs a ~10s reference clip:
 
 ```bash
-cp /path/to/speaker.wav voices/default.wav
+cp /path/to/speaker.wav voices/kelvin.wav
 ```
 
 See [voices/README.md](voices/README.md) for paralinguistic tags (`[chuckle]`, `[laugh]`, etc.).
@@ -80,7 +79,7 @@ curl -X POST http://localhost:8765/v1/tts \
   -H "Content-Type: application/json" \
   -d '{
     "text": "Hi, this is One CoSec calling [chuckle].",
-    "voice_id": "default",
+    "voice_id": "kelvin",
     "stream": false,
     "response_format": "wav"
   }'
@@ -115,10 +114,7 @@ chmod +x scripts/start-ngrok.sh
 ./scripts/start-ngrok.sh
 ```
 
-Copy the `https://….ngrok-free.app` URL into:
-
-- `VOICE_GPU_BASE_URL` in `voice-gpu-server/.env`
-- `VOICE_GPU_BASE_URL` in `pipecat/.env` (for the bot)
+Copy the `https://….ngrok-free.app` URL into `VOICE_GPU_BASE_URL` in your Pipecat bot `.env`.
 
 ## Connect Pipecat
 
@@ -126,27 +122,25 @@ A companion bot is at `pipecat/my-bot-gpu.py`. It uses:
 
 - `VoiceGpuSTTService` — segmented STT over HTTP
 - `VoiceGpuTTSService` — streaming TTS over HTTP
-- `OpenRouterLLMService` — cloud LLM (unchanged)
+
+LLM is configured in the Pipecat project (`pipecat/.env`), not in this server.
 
 ```bash
 cd ../pipecat
-cp ../voice-gpu-server/.env.example .env  # or merge keys
-# Set OPENROUTER_API_KEY, VOICE_GPU_BASE_URL, VOICE_GPU_API_KEY
+# Set VOICE_GPU_BASE_URL and VOICE_GPU_API_KEY in pipecat/.env
 
 uv run python my-bot-gpu.py
 ```
 
 Pipecat service classes live in `pipecat_services/` and are imported via `sys.path` — no fork of Pipecat required.
 
-### Environment variables (Pipecat)
+### Environment variables (Pipecat client)
 
 | Variable | Purpose |
 |----------|---------|
 | `VOICE_GPU_BASE_URL` | GPU server URL (local or ngrok) |
 | `VOICE_GPU_API_KEY` | Must match server key |
-| `DEFAULT_VOICE_ID` | Chatterbox voice reference name |
-| `OPENROUTER_API_KEY` | Cloud LLM |
-| `OPENROUTER_MODEL` | Optional, default `inception/mercury-2` |
+| `DEFAULT_VOICE_ID` | Chatterbox voice reference name (`kelvin`, `lim`, etc.) |
 
 ## Configuration
 
