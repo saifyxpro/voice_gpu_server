@@ -223,6 +223,11 @@ See [.env.example](.env.example). Key options:
 | `STT_DEVICE` | `cuda` | Canary device |
 | `EAGER_LOAD_MODELS` | `true` | Downloads and loads models at startup |
 | `VOICES_DIR` | `./voices` | Reference WAV files |
+| `TTS_TEMPERATURE` | `0.8` | Sampling temperature |
+| `TTS_TOP_P` / `TTS_TOP_K` | `0.95` / `1000` | Nucleus / top-k sampling |
+| `TTS_REPETITION_PENALTY` | `1.2` | Discourage repeated tokens |
+| `TTS_EXAGGERATION` | `0.5` | Voice expressiveness at **prep** time (Turbo ignores at generate) |
+| `TTS_STREAM_CHUNK_TOKENS` | `16` | Tokens per streamed PCM chunk — lower = faster first byte |
 | `STT_SAMPLE_RATE` | `16000` | Canary expects 16 kHz mono |
 
 ## Project layout
@@ -245,7 +250,8 @@ voice-gpu-server/
 4. **Chatterbox voice file** — TTS requests fail until `voices/{voice_id}.wav` exists.
 5. **VRAM** — Loading both models may need 12–20 GB depending on precision; set `EAGER_LOAD_MODELS=false` to load on first request instead.
 6. **Streaming STT** — Canary is batch/segment-based via NeMo `generate()`; Pipecat uses `SegmentedSTTService` with VAD (same pattern as Fal Wizper).
-7. **ngrok** — use your static free dev domain (`NGROK_URL`); tunnel must stay running. API clients need `ngrok-skip-browser-warning: true` on free plan.
+7. **Streaming TTS** — `POST /v1/tts` with `stream=true` yields PCM as Chatterbox generates tokens (not post-hoc chunking). Voice conditionals are cached at startup. Lower `TTS_STREAM_CHUNK_TOKENS` (e.g. `12`) for faster time-to-first-byte.
+8. **ngrok** — use your static free dev domain (`NGROK_URL`); tunnel must stay running. API clients need `ngrok-skip-browser-warning: true` on free plan.
 
 ## Development
 

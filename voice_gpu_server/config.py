@@ -29,6 +29,16 @@ class Settings:
     voices_dir: Path
     stt_sample_rate: int
     public_base_url: str | None
+    tts_temperature: float
+    tts_top_p: float
+    tts_top_k: int
+    tts_repetition_penalty: float
+    tts_exaggeration: float
+    tts_norm_loudness: bool
+    tts_stream_chunk_tokens: int
+    tts_stream_crossfade_ms: float
+    tts_max_gen_len: int
+    tts_n_cfm_timesteps: int
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -53,6 +63,16 @@ class Settings:
             voices_dir=voices_dir,
             stt_sample_rate=int(os.getenv("STT_SAMPLE_RATE", "16000")),
             public_base_url=os.getenv("VOICE_GPU_BASE_URL") or None,
+            tts_temperature=float(os.getenv("TTS_TEMPERATURE", "0.8")),
+            tts_top_p=float(os.getenv("TTS_TOP_P", "0.95")),
+            tts_top_k=int(os.getenv("TTS_TOP_K", "1000")),
+            tts_repetition_penalty=float(os.getenv("TTS_REPETITION_PENALTY", "1.2")),
+            tts_exaggeration=float(os.getenv("TTS_EXAGGERATION", "0.5")),
+            tts_norm_loudness=os.getenv("TTS_NORM_LOUDNESS", "true").lower() == "true",
+            tts_stream_chunk_tokens=int(os.getenv("TTS_STREAM_CHUNK_TOKENS", "16")),
+            tts_stream_crossfade_ms=float(os.getenv("TTS_STREAM_CROSSFADE_MS", "12.0")),
+            tts_max_gen_len=int(os.getenv("TTS_MAX_GEN_LEN", "1000")),
+            tts_n_cfm_timesteps=int(os.getenv("TTS_N_CFM_TIMESTEPS", "2")),
         )
 
 

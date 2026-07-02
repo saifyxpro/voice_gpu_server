@@ -26,6 +26,9 @@ class ModelManager:
         await self.tts.load()
         logger.info("Chatterbox TTS ready (sample_rate={})", self.tts.sample_rate)
 
+        logger.info("Preparing Chatterbox voice conditionals...")
+        await self.tts.prepare_all_voices()
+
         logger.info("Eager loading Canary STT (may download from Hugging Face)...")
         try:
             await self.stt.load()

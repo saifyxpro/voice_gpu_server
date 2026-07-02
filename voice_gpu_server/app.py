@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile, status
@@ -10,7 +11,7 @@ from fastapi.responses import Response, StreamingResponse
 from loguru import logger
 
 from voice_gpu_server import __version__
-from voice_gpu_server.audio_utils import chunk_bytes, pcm_to_wav
+from voice_gpu_server.audio_utils import pcm_to_wav
 from voice_gpu_server.auth import verify_api_key
 from voice_gpu_server.config import settings
 from voice_gpu_server.models import model_manager
@@ -65,11 +66,58 @@ async def list_voices() -> VoicesListResponse:
     return VoicesListResponse(voices=voices, default_voice_id=settings.default_voice_id)
 
 
+async def _stream_tts_pcm(text: str, voice_id: str) -> AsyncIterator[bytes]:
+    """Stream raw PCM as Chatterbox generates audio (low time-to-first-byte)."""
+    async for chunk in model_manager.tts.synthesize_stream(text, voice_id):
+        yield chunk
+
+
+async def _stream_tts_wav(text: str, voice_id: str, sample_rate: int) -> AsyncIterator[bytes]:
+    """Wrap streaming PCM in a WAV container (header first, then PCM chunks)."""
+    import io
+    import wave
+
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(sample_rate)
+    yield buf.getvalue()
+
+    async for chunk in model_manager.tts.synthesize_stream(text, voice_id):
+        yield chunk
+
+
 @app.post("/v1/tts", dependencies=[Depends(verify_api_key)])
 async def synthesize(request: TTSRequest):
     """Synthesize speech. Returns streaming PCM/WAV or JSON with base64 audio."""
+    voice_id = request.voice_id or settings.default_voice_id
+
+    if request.stream:
+        sample_rate = model_manager.tts.sample_rate or 24000
+        headers = {
+            "X-Sample-Rate": str(sample_rate),
+            "X-Voice-Id": voice_id,
+            "X-Audio-Format": request.response_format,
+        }
+        try:
+            if request.response_format == "wav":
+                body = _stream_tts_wav(request.text, voice_id, sample_rate)
+                media_type = WAV_MEDIA_TYPE
+            else:
+                body = _stream_tts_pcm(request.text, voice_id)
+                media_type = PCM_MEDIA_TYPE
+            return StreamingResponse(body, media_type=media_type, headers=headers)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        except Exception as exc:
+            logger.exception("TTS streaming failed")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=str(exc),
+            ) from exc
+
     try:
-        voice_id = request.voice_id or settings.default_voice_id
         pcm, sample_rate = await model_manager.tts.synthesize(request.text, voice_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -82,21 +130,8 @@ async def synthesize(request: TTSRequest):
 
     if request.response_format == "wav":
         payload = pcm_to_wav(pcm, sample_rate)
-        media_type = WAV_MEDIA_TYPE
     else:
         payload = pcm
-        media_type = PCM_MEDIA_TYPE
-
-    if request.stream:
-        return StreamingResponse(
-            chunk_bytes(payload),
-            media_type=media_type,
-            headers={
-                "X-Sample-Rate": str(sample_rate),
-                "X-Voice-Id": voice_id,
-                "X-Audio-Format": request.response_format,
-            },
-        )
 
     encoded = base64.b64encode(payload).decode("ascii")
     return TTSResponse(

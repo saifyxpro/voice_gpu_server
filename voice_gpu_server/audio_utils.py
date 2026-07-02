@@ -52,3 +52,12 @@ def chunk_bytes(data: bytes, chunk_size: int = 8192) -> Iterator[bytes]:
     """Yield fixed-size byte chunks."""
     for offset in range(0, len(data), chunk_size):
         yield data[offset : offset + chunk_size]
+
+
+def float_audio_to_pcm16(audio) -> bytes:
+    """Convert float32 mono waveform [-1, 1] to 16-bit PCM bytes."""
+    arr = audio.detach().cpu().numpy()
+    if arr.ndim > 1:
+        arr = arr.squeeze()
+    arr = np.clip(arr, -1.0, 1.0)
+    return (arr * 32767).astype(np.int16).tobytes()
