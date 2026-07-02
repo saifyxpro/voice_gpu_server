@@ -168,6 +168,23 @@ ngrok-skip-browser-warning: true
 
 `scripts/test-api.sh` and `pipecat_services/` clients include this when the base URL contains `ngrok`.
 
+### Smoke tests
+
+```bash
+./scripts/test-api.sh
+```
+
+The script exercises **both voices** (`kelvin`, `lim`) with Singlish sample text and Chatterbox expressive tags (`[chuckle]`, `[laugh]`). Outputs land in `.test-output/`:
+
+| File | Test |
+|------|------|
+| `tts-kelvin.wav` | Kelvin, non-streaming WAV |
+| `tts-lim.wav` | Lim, non-streaming WAV |
+| `tts-kelvin-stream.pcm` | Kelvin streaming PCM |
+| `tts-lim-stream.pcm` | Lim streaming PCM |
+
+STT uploads both `voices/kelvin.wav` and `voices/lim.wav`.
+
 Set `VOICE_GPU_BASE_URL` in your Pipecat bot `.env` to the same `https://…ngrok-free.dev` URL.
 
 ## Connect Pipecat

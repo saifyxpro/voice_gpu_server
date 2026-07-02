@@ -138,17 +138,44 @@ for name in ('kelvin', 'lim'):
 print('voices:', sorted(ids))
 " && pass "kelvin and lim found" || fail "voices missing"
 
-# --- 3. TTS non-streaming ---
+# Build JSON TTS payload safely (handles quotes, tags, apostrophes)
+tts_payload() {
+  local voice_id="$1"
+  local stream="$2"
+  local format="$3"
+  local text="$4"
+  local out_file="$5"
+  python3 - "$voice_id" "$stream" "$format" "$text" "$out_file" <<'PY'
+import json, sys
+voice_id, stream, fmt, text, out = sys.argv[1:6]
+with open(out, "w", encoding="utf-8") as f:
+    json.dump(
+        {
+            "text": text,
+            "voice_id": voice_id,
+            "stream": stream.lower() == "true",
+            "response_format": fmt,
+        },
+        f,
+        ensure_ascii=False,
+    )
+PY
+}
+
+# --- 3. TTS kelvin (non-streaming WAV + expressive tags) ---
 echo ""
-echo "--- 3. TTS (kelvin, non-streaming WAV) — first run may load GPU model (slow) ---"
+echo "--- 3. TTS (kelvin, non-streaming WAV + expressive tags) ---"
+KELVIN_TEXT="Hi, good afternoon. This is Kevin from One CoSec, ah [chuckle]. Got a few reminders about your AGM and filing dates lor. [laugh] Don't worry lah, quite straightforward one. You free now to talk, or you prefer I send everything by email instead hor?"
+echo "text: ${KELVIN_TEXT}"
+tts_payload kelvin false wav "$KELVIN_TEXT" "${OUT_DIR}/payload-kelvin.json"
 TTS_RAW=$(curl "${CURL_OPTS[@]}" "${NGROK_HDR[@]}" "${AUTH[@]}" \
   -H "Content-Type: application/json" \
   -X POST "${BASE_URL}/v1/tts" \
-  -d '{"text":"Hi, Kevin from One CoSec, ah [chuckle].","voice_id":"kelvin","stream":false,"response_format":"wav"}' \
+  -d @"${OUT_DIR}/payload-kelvin.json" \
   -w $'\n%{http_code}')
 TTS_CODE="${TTS_RAW##*$'\n'}"
 TTS_BODY="${TTS_RAW%$'\n'*}"
-[[ "$TTS_CODE" == "200" ]] || { echo "$TTS_BODY" | python3 -m json.tool 2>/dev/null || echo "$TTS_BODY"; fail "TTS HTTP ${TTS_CODE}"; }
+[[ "$TTS_CODE" == "200" ]] || { echo "$TTS_BODY" | python3 -m json.tool 2>/dev/null || echo "$TTS_BODY"; fail "TTS kelvin HTTP ${TTS_CODE}"; }
 echo "$TTS_BODY" | python3 -c "
 import sys, json, base64, os
 d = json.load(sys.stdin)
@@ -161,45 +188,88 @@ out = os.path.join('${OUT_DIR}', 'tts-kelvin.wav')
 open(out, 'wb').write(base64.b64decode(b64))
 print('wrote', out)
 "
-test -s "${OUT_DIR}/tts-kelvin.wav" && pass "TTS kelvin WAV saved" || fail "TTS output empty"
+test -s "${OUT_DIR}/tts-kelvin.wav" && pass "TTS kelvin WAV saved" || fail "TTS kelvin output empty"
 
-# --- 4. TTS streaming ---
+# --- 4. TTS lim (non-streaming WAV + expressive tags) ---
 echo ""
-echo "--- 4. TTS (lim, streaming PCM) ---"
-TTS_STREAM_CODE=$(curl "${CURL_OPTS[@]}" "${NGROK_HDR[@]}" "${AUTH[@]}" \
+echo "--- 4. TTS (lim, non-streaming WAV + expressive tags) ---"
+LIM_TEXT="Hello, Lim here from One CoSec again, ah [chuckle]. Just a gentle reminder leh — your annual return deadline coming up already, so I thought I'll give you a quick call. Nothing to panic about lah [laugh]. If you already submitted, can let me know hor? Otherwise I can walk you through the steps now — you got five minutes or not?"
+echo "text: ${LIM_TEXT}"
+tts_payload lim false wav "$LIM_TEXT" "${OUT_DIR}/payload-lim.json"
+TTS_LIM_RAW=$(curl "${CURL_OPTS[@]}" "${NGROK_HDR[@]}" "${AUTH[@]}" \
   -H "Content-Type: application/json" \
   -X POST "${BASE_URL}/v1/tts" \
-  -d '{"text":"Hello from Lim, lah.","voice_id":"lim","stream":true,"response_format":"pcm"}' \
-  -D "${OUT_DIR}/tts-lim-headers.txt" \
-  -o "${OUT_DIR}/tts-lim.pcm" \
-  -w "%{http_code}")
-head -20 "${OUT_DIR}/tts-lim-headers.txt"
-[[ "$TTS_STREAM_CODE" == "200" ]] || fail "streaming TTS HTTP ${TTS_STREAM_CODE}"
-if [[ "$(head -c 1 "${OUT_DIR}/tts-lim.pcm")" == "{" ]]; then
-  cat "${OUT_DIR}/tts-lim.pcm"
-  fail "streaming TTS returned JSON error instead of PCM"
-fi
-PCM_BYTES=$(wc -c < "${OUT_DIR}/tts-lim.pcm")
-[[ "$PCM_BYTES" -gt 1000 ]] && pass "streaming TTS PCM (${PCM_BYTES} bytes)" || fail "streaming TTS too small (${PCM_BYTES} bytes)"
-
-# --- 5. STT ---
-echo ""
-echo "--- 5. STT (upload lim.wav) — first run may load GPU model (slow) ---"
-[[ -f "${VOICES_DIR}/lim.wav" ]] || fail "missing ${VOICES_DIR}/lim.wav"
-STT_RAW=$(curl "${CURL_OPTS[@]}" "${NGROK_HDR[@]}" "${AUTH[@]}" \
-  -F "file=@${VOICES_DIR}/lim.wav;type=audio/wav" \
-  "${BASE_URL}/v1/stt" \
+  -d @"${OUT_DIR}/payload-lim.json" \
   -w $'\n%{http_code}')
-STT_CODE="${STT_RAW##*$'\n'}"
-STT_BODY="${STT_RAW%$'\n'*}"
-echo "$STT_BODY" | python3 -m json.tool
-[[ "$STT_CODE" == "200" ]] || fail "STT HTTP ${STT_CODE}: $(echo "$STT_BODY" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("detail",""))' 2>/dev/null || echo "$STT_BODY")"
-STT_TEXT=$(echo "$STT_BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('text','').strip())")
-[[ -n "$STT_TEXT" ]] && pass "STT text: ${STT_TEXT:0:120}..." || fail "STT returned empty text"
+TTS_LIM_CODE="${TTS_LIM_RAW##*$'\n'}"
+TTS_LIM_BODY="${TTS_LIM_RAW%$'\n'*}"
+[[ "$TTS_LIM_CODE" == "200" ]] || { echo "$TTS_LIM_BODY" | python3 -m json.tool 2>/dev/null || echo "$TTS_LIM_BODY"; fail "TTS lim HTTP ${TTS_LIM_CODE}"; }
+echo "$TTS_LIM_BODY" | python3 -c "
+import sys, json, base64, os
+d = json.load(sys.stdin)
+meta = {k: d[k] for k in d if k != 'audio_base64'}
+print(meta)
+b64 = d.get('audio_base64') or ''
+print('audio_base64 length:', len(b64))
+assert b64, 'empty audio_base64'
+out = os.path.join('${OUT_DIR}', 'tts-lim.wav')
+open(out, 'wb').write(base64.b64decode(b64))
+print('wrote', out)
+"
+test -s "${OUT_DIR}/tts-lim.wav" && pass "TTS lim WAV saved" || fail "TTS lim output empty"
 
-# --- 6. Auth ---
+# --- 5. TTS streaming (kelvin + lim) ---
 echo ""
-echo "--- 6. Auth rejection (no key) ---"
+echo "--- 5. TTS streaming PCM (kelvin + lim) ---"
+for VOICE in kelvin lim; do
+  STREAM_TEXT="Hey there [chuckle], quick test from ${VOICE}, ah. Can hear me okay or not?"
+  echo "streaming ${VOICE}: ${STREAM_TEXT}"
+  tts_payload "$VOICE" true pcm "$STREAM_TEXT" "${OUT_DIR}/payload-${VOICE}-stream.json"
+  TTS_STREAM_CODE=$(curl "${CURL_OPTS[@]}" "${NGROK_HDR[@]}" "${AUTH[@]}" \
+    -H "Content-Type: application/json" \
+    -X POST "${BASE_URL}/v1/tts" \
+    -d @"${OUT_DIR}/payload-${VOICE}-stream.json" \
+    -D "${OUT_DIR}/tts-${VOICE}-stream-headers.txt" \
+    -o "${OUT_DIR}/tts-${VOICE}-stream.pcm" \
+    -w "%{http_code}")
+  head -8 "${OUT_DIR}/tts-${VOICE}-stream-headers.txt"
+  [[ "$TTS_STREAM_CODE" == "200" ]] || fail "streaming TTS ${VOICE} HTTP ${TTS_STREAM_CODE}"
+  if python3 -c "import sys; sys.exit(0 if open('${OUT_DIR}/tts-${VOICE}-stream.pcm','rb').read(1) != b'{' else 1)"; then
+    PCM_BYTES=$(wc -c < "${OUT_DIR}/tts-${VOICE}-stream.pcm")
+    [[ "$PCM_BYTES" -gt 1000 ]] && pass "streaming TTS ${VOICE} PCM (${PCM_BYTES} bytes)" || fail "streaming TTS ${VOICE} too small (${PCM_BYTES} bytes)"
+  else
+    cat "${OUT_DIR}/tts-${VOICE}-stream.pcm"
+    fail "streaming TTS ${VOICE} returned JSON error instead of PCM"
+  fi
+done
+
+# --- 6. STT (both reference voices) ---
+stt_upload() {
+  local label="$1"
+  local wav_path="$2"
+  echo ""
+  echo "--- STT (${label}: $(basename "$wav_path")) ---"
+  [[ -f "$wav_path" ]] || fail "missing ${wav_path}"
+  STT_RAW=$(curl "${CURL_OPTS[@]}" "${NGROK_HDR[@]}" "${AUTH[@]}" \
+    -F "file=@${wav_path};type=audio/wav" \
+    "${BASE_URL}/v1/stt" \
+    -w $'\n%{http_code}')
+  STT_CODE="${STT_RAW##*$'\n'}"
+  STT_BODY="${STT_RAW%$'\n'*}"
+  echo "$STT_BODY" | python3 -m json.tool
+  [[ "$STT_CODE" == "200" ]] || fail "STT ${label} HTTP ${STT_CODE}: $(echo "$STT_BODY" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("detail",""))' 2>/dev/null || echo "$STT_BODY")"
+  STT_TEXT=$(echo "$STT_BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('text','').strip())")
+  [[ -n "$STT_TEXT" ]] && pass "STT ${label}: ${STT_TEXT:0:120}..." || fail "STT ${label} returned empty text"
+}
+
+echo ""
+echo "--- 6. STT (upload reference WAVs) ---"
+stt_upload kelvin "${VOICES_DIR}/kelvin.wav"
+stt_upload lim "${VOICES_DIR}/lim.wav"
+
+# --- 7. Auth ---
+echo ""
+echo "--- 7. Auth rejection (no key) ---"
 AUTH_CODE=$(curl "${CURL_OPTS[@]}" "${NGROK_HDR[@]}" -o /dev/null -w "%{http_code}" "${BASE_URL}/v1/voices")
 if [[ "$AUTH_CODE" == "401" ]]; then
   pass "unauthenticated request rejected (401)"
